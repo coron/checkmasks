@@ -313,7 +313,7 @@
    (format 't "Number of variables: ~A~%" (length listvar))
    (format 't "Number of nuples: ~A~%" (length nu)))
 
-; SecMult is t-SNI. See [Cor17b, Lemma 5] 
+; SecMult is t-SNI. See [Cor17b, Lemma 6] 
 (defun check-secmult-sni (n)
   (let* ((nt (- n 1))
 	 (inpa (shares 'a n))
@@ -349,10 +349,29 @@
   (dolist (i (range 3 nmax))
     (time (check-refreshmasks-last i))))
 
+; We consider RefreshMasks with n+1 inputs, with x_{n+1}=0.
+; For t probes, only t-1 inputs are required for the simulation, instead of t,
+; except in the trivial case of the adversary probing the input xi's only 
+; Formal verification of [Cor17b, Lemma 5], correpsonding to [Cor17a, Lemma 5]
+(defun check-refreshmasks-zero (n)
+  (init-counter-rand)
+  (let* ((is (shares 'x n))
+	 (in (append is (list 0)))
+	 (a (refreshmasks in))
+	 (listvar (h-list-variables a))
+	 (nu (nuple n listvar)))
+    (print-info-in-out-var-nuples in a listvar nu)
+    (dolist (y nu 't)
+      (unless (equal y is)
+	(let ((si (iter-simplify y)))
+	  (when (> (ninput si 'x) (- n 1))
+	    (format 't "~A~%" y)
+	    (return-from check-refreshmasks-zero nil)))))))
+
 ; When the last output variable yn of RefreshMasks is probed, and when there are a total
 ; of n probes, then only n-1 input variables are required for the simulation, unless
 ; the n probes are on the n outputs yi.
-; Formal verification of [Cor17b, Lemma 9], corresponding to [Cor17a, Lemma 7]
+; Formal verification of [Cor17b, Lemma 10], corresponding to [Cor17a, Lemma 7]
 (defun check-refreshmasks-last-n (n)
   (init-counter-rand)
   (let* ((in (shares 'x n))
@@ -372,7 +391,7 @@
 ; We consider the RefreshMasks circuit in which we xor the last two outputs y_{n-1}
 ; and y_n. For t probes, only t inputs are required. For t=n-1, we exclude the
 ; case of all n-1 output variables being probed. We can do the check for t=n-1 probes only.
-; Formal verification of [Cor17b, Lemma 11], corresponding to [Cor17a, Lemma 8]
+; Formal verification of [Cor17b, Lemma 12], corresponding to [Cor17a, Lemma 8]
 (defun check-refreshmasks-xor (n)
   (init-counter-rand)
   (let* ((in (shares 'x n))
@@ -389,24 +408,6 @@
 	  (when (> (ninput si 'x) (- n 1))
 	    (format 't "~A~%" y)
 	    (return-from check-refreshmasks-xor nil)))))))
-
-; We consider RefreshMasks with n+1 inputs, with x_{n+1}=0.
-; For t probes, only t-1 inputs are required for the simulation, instead of t,
-; except in the trivial case of the adversary probing the input xi's only 
-(defun check-refreshmasks-zero (n)
-  (init-counter-rand)
-  (let* ((is (shares 'x n))
-	 (in (append is (list 0)))
-	 (a (refreshmasks in))
-	 (listvar (h-list-variables a))
-	 (nu (nuple n listvar)))
-    (print-info-in-out-var-nuples in a listvar nu)
-    (dolist (y nu 't)
-      (unless (equal y is)
-	(let ((si (iter-simplify y)))
-	  (when (> (ninput si 'x) (- n 1))
-	    (format 't "~A~%" y)
-	    (return-from check-refreshmasks-zero nil)))))))
 
 
 ; Routines for formal verification in polynomial time
@@ -474,7 +475,7 @@
 
 ; When the last output variable yn of RefreshMasks is probed, then only t-1 input
 ; variables are required for the simulation, instead of t.
-; Formal verification in polynomial time of [Cor17b, Lemma 4], corresponding to 
+; Formal verification in polynomial time of [Cor17b, Section 4.4, Lemma 4], corresponding to 
 ; [Cor17a, Lemma 6]. See [Cor17b, Section 4.4].
 (defun check-refreshmasks-last-poly (n)
   (init-counter-rand)
@@ -498,6 +499,32 @@
 	  (format 't "Random zero: ~A~%" va4)
 	  (format 't "    First probe: ~A. Other ~A probes in ~A~%" (nth (- n 2) va4) (- n 2) (remove 0 va4)))))))
 
+(defun circuit-otp (x n &key init-rand)
+  (when init-rand (init-counter-rand))
+  (mapcar (lambda (u) `(+ ,(new-rand) ,u)) (shares x n)))
+
+; We consider RefreshMasks with n+1 inputs, with x_{n+1}=0.
+; For t probes, only t-1 inputs are required for the simulation, instead of t,
+; except in the trivial case of the adversary probing the input xi's only 
+; Formal verification of [Cor17b, Appendix D, Lemma 5], corresponding to [Cor17a, Lemma 5]
+(defun check-refreshmasks-zero-poly (n)
+  (init-counter-rand)
+  (let* ((inp (append (shares 'x n) (list 0)))
+	 (a (simplify-zero (refreshmasks inp))))
+    (format 't "Input: ~A~%" inp)
+    (format 't "Output: ~A~%" a)
+    (format 't "Excluded: ~A~%" (shares 'x n))
+    (and
+      (let ((cg1 (simplify-random-zero a)))
+	(format 't "Case 1: one probe in ~A~%" (last a))
+	(format 't "  Random zero: ~A~%" cg1)
+	(format 't "  First probe: ~A~%" (car (last cg1)))
+	(format 't "  Other ~A probes in: ~A~%" (- n 1) cg1)
+	(and (eq 0 (car (last cg1))) (equal inp cg1)))
+      (let ((na (butlast a)))
+        (format 't "Case 2: no probe in ~A~%" (last a))
+	(format 't "  Subcircuit: ~A~%" na)
+	(equal na (circuit-otp 'x n :init-rand 't))))))
 
 ; We use some routines to simplify the printing of the SecMult matrix.
 
@@ -562,7 +589,7 @@
 	  ('t lst))))
 
 ; Formal verification of the t-NI property of SecMult in polynomial-time
-; See Lemma 8 in Section 4.5 of [Cor17b]
+; See Lemma 9 in Section 4.5 of [Cor17b]
 (defun check-secmult-ni-poly (n)
   (init-counter-rand)
   (let* ((inpx (shares 'x n))
@@ -584,7 +611,7 @@
 	  (format 't "  Random zero: ~A" (pretty-print-matrix na3 (- n 1) :indent 15 :nof 't)))))))
 
 ; Formal verification of the t-SNI property of SecMult in polynomial-time
-; See Lemma 5 and Appendix D in [Cor17b]
+; See Lemma 6 and Appendix E in [Cor17b]
 (defun check-secmult-sni-poly (n)
   (init-counter-rand)
   (let* ((inpx (shares 'x n))
