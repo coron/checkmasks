@@ -76,8 +76,12 @@
   (defun init-counter-rand ()
     (setf i 0)))
 
+(defun is-var (a x)
+  (and (symbolp a)
+       (eq (aref (symbol-name a) 0) (aref (symbol-name x) 0))))
+
 (defun is-rand (a)
-  (and (symbolp a) (eq (aref (symbol-name a) 0) #\R)))
+  (is-var a 'r))
 
 (defun shares (s n)
   (mapcar (lambda (i)
@@ -88,7 +92,8 @@
   `(setf ,n (if ,n `(+ ,,val ,,n) ,val)))
 
 ; The linear RefreshMasks from [RP10]
-(defun refreshmasks (a &key reverse)
+(defun refreshmasks (a &key reverse init-counter)
+  (when init-counter (init-counter-rand))
   (let* ((n (length a))
 	 (c (copy-seq (if reverse (reverse a) a))))
     (dotimes (i (- n 1))
@@ -98,7 +103,8 @@
     (if reverse (nreverse c) c)))
 
 ; The full mask refreshing algorithm based on the masked multiplication, from [ISW03] and [DDF14]
-(defun fullrefresh (a)
+(defun fullrefresh (a &key init-counter)
+  (when init-counter (init-counter-rand))
   (let* ((n (length a))
 	 (ci (copy-seq a)))
     (dotimes (i n ci)
@@ -476,7 +482,7 @@
 ; When the last output variable yn of RefreshMasks is probed, then only t-1 input
 ; variables are required for the simulation, instead of t.
 ; Formal verification in polynomial time of [Cor17b, Section 4.4, Lemma 4], corresponding to 
-; [Cor17a, Lemma 6]. See [Cor17b, Section 4.4].
+; [Cor17a, Lemma 6].
 (defun check-refreshmasks-last-poly (n)
   (init-counter-rand)
   (let* ((inp (shares 'x n))
@@ -506,7 +512,7 @@
 ; We consider RefreshMasks with n+1 inputs, with x_{n+1}=0.
 ; For t probes, only t-1 inputs are required for the simulation, instead of t,
 ; except in the trivial case of the adversary probing the input xi's only 
-; Formal verification of [Cor17b, Appendix D, Lemma 5], corresponding to [Cor17a, Lemma 5]
+; Formal verification of [Cor17b, Appendix B, Lemma 5], corresponding to [Cor17a, Lemma 5]
 (defun check-refreshmasks-zero-poly (n)
   (init-counter-rand)
   (let* ((inp (append (shares 'x n) (list 0)))
@@ -611,7 +617,7 @@
 	  (format 't "  Random zero: ~A" (pretty-print-matrix na3 (- n 1) :indent 15 :nof 't)))))))
 
 ; Formal verification of the t-SNI property of SecMult in polynomial-time
-; See Lemma 6 and Appendix E in [Cor17b]
+; See Lemma 6 and Appendix C in [Cor17b]
 (defun check-secmult-sni-poly (n)
   (init-counter-rand)
   (let* ((inpx (shares 'x n))
@@ -648,3 +654,82 @@
 		(format 't "    New c. : ~A" (pretty-print-matrix a3 n :indent 13 :nof 't))
 		(let ((a4 (simplify-random-zero a3 :only lrand)))
 		  (format 't "    Rand 0 : ~A" (pretty-print-matrix a4 (- n 1) :indent 13 :nof 't)))))))))))
+
+; Automatic generation of security proofs
+
+; Rule R1
+(defmacro with-subcircuits ((x a) &body body)
+  (with-gensyms (y)
+    `(dolist (,y ,a)
+       (let ((,x (remove ,y ,a)))
+	 ,@body))))
+
+; Rule R2
+(defun simplify-random-zero-except-once (a)
+  (simplify-random-zero a :except (occur-once a)))
+
+; Rule R3: compare with C_{otp}
+(defun compare-otp (a)
+  (let ((n (length a))
+	lr lx)
+    (dolist (v a 't)
+      (when (and (listp v) (eq (car v) '+))
+	(push (cadr v) lr) ; randoms
+	(push (caddr v) lx))) ; variables
+    (and (eq (ninput lr 'r) n)
+	 (eq (ninput lx 'x) n))))
+
+; Rule R3: we check property p exhaustively on tuples of length nt
+(defun final-check (a nt p)
+  (dolist (x (nuple nt (h-list-variables a)) 't)
+    (let* ((si (iter-simplify x))
+	   (I (ninput si 'x)))
+      (when (null (funcall p x I))
+	(format 't "tuple: ~A~%" x)
+	(return-from final-check nil)))))
+
+; We apply rules R1, R2 and R3
+(defun check-automatic (in a nt p)
+  (format 't "Input: ~A~%" in)
+  (format 't "Circuit: ~A~%" a)
+  (let ((flag 't))
+    (with-subcircuits (s a)
+      (format 't "  R1: ~A  " s)
+      (let ((s0 (simplify-random-zero-except-once s)))
+	(format 't "R2: ~A  " s0)
+	(let ((cotp (compare-otp s0)))
+	  (format 't "R3: is OTP: ~A~%" cotp)
+	  (unless cotp
+	    (let ((check (final-check s nt p)))
+	      (format 't "    R3: check: ~A~%" check)
+	      (unless check
+		(setf flag nil)))))))
+    (format 't "  Verif: ~A~%" flag)
+    flag))
+
+; Checks the properties of the four circuits from [Cor17b,Section 5], in poly-time.
+(defun check-circuits (n)
+  (let ((in (shares 'x n)))
+    (and 
+     (let ((a (refreshmasks in :init-counter 't)))
+       (format 't "Refreshmasks: t-NI property:~%")
+       (check-automatic in a (- n 1)
+			(lambda (tuple I)
+			  (<= I (length tuple)))))
+     (let ((a (fullrefresh in :init-counter 't)))
+       (format 't "~%FullRefresh: t-SNI property:~%")
+       (check-automatic in a (- n 1) nil))
+     (let ((a (refreshmasks in :init-counter 't)))
+       (format 't "~%Refreshmasks: with probed yn:~%")
+       (check-automatic in a (- n 1) 
+			(lambda (tuple I)
+			  (or (not (find (last a) tuple))
+			      (<= I (- (length tuple) 1))))))
+     (let* ((in2 (append in (list 0)))
+	    (a (refreshmasks in2 :init-counter 't)))
+       (format 't "~%Refreshmasks: with probed x_{n+1}=0:~%")
+       (check-automatic in2 a n
+			(lambda (tuple I)
+			  (<= I (- (length tuple) 1))))))))
+
+
