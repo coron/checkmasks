@@ -507,6 +507,104 @@
     (format 't "n=~A~%" i)
     (time (check-refreshmasks-zero-imp i))))
 
+; (sort-var '(x3 x2 x1)) => (x1 x2 x3)
+(defun sort-var (x)
+  (sort x #'< :key (lambda (u) (parse-integer (symbol-name u) :start 1))))
+
+; (a a b b b c) => (b c)
+(defun remove-mod-2 (a)
+  (let (out (h (make-hash-table)))
+    (dolist (x a)
+      (if (atom x)
+	  (incf-nil (gethash x h))
+	  (push x out)))
+    (let (out2 outr)
+      (maphash (lambda (x v)
+		 (when (eq (mod v 2) 1)
+		   (if (is-rand x)
+		       (push x outr)
+		       (push x out2)))) h)
+      (append out (sort-var out2) (sort-var outr)))))
+      
+(defun single (x)
+  (and (consp x) (null (cdr x))))
+
+; (+ (+ a b) (+ a c)) => (+ c b)
+(defun flatten-xor (n)
+  (if (is-xor n) 
+      (let (out)
+	(dolist (x (cdr n))
+	  (if (is-xor x)
+	    (dolist (y (cdr x))
+	      (push y out))
+	    (unless (eq x 0)
+	      (push x out))))
+	(let ((out2 (remove-mod-2 out)))
+	  (cond ((null out2) 0)
+		((single out2) (car out2))
+		('t `(+ ,@out2)))))
+      n))
+
+(defun t-flatten-xor (n)
+  (tappm n (if (atom it) 
+	       it 
+	       (flatten-xor lst))))
+
+(defun min-elem (a &key (test #'identity))
+  (let ((v (car a))
+	(m (funcall test (car a))))
+    (dolist (x (cdr a) v)
+      (let ((m2 (funcall test x)))
+	(when (< m2 m)
+	  (setf v x m m2))))))
+
+(defun is-xor (n)
+  (and (consp n) (eq (car n) '+)))
+
+(defun replace-n-pair (a old new old2 new2)
+  (tappm a
+    (cond ((equal it old) new)
+	  ((equal it old2) new2)
+	  ((atom it) it)
+	  ('t lst))))
+
+; (+ r1 r2 (+ r1 r3)) => (r2)
+(defun masks-occur-once (a)
+  (if (is-xor a)
+      (remove-if-not (lambda (r)
+		       (find r a)) 
+		     (occur-once a))))
+
+; ((+ r1 x1) (+ r1 x2)) => (r1 (+ (+ r1 x1) x2))
+; ((+ r1 x1) r1 x2) => ((+ r1 x1) r1 x2)
+(defun simplify-x (a)
+  (let ((li (remove-if-not #'masks-occur-once 
+			   (remove-if (lambda (u)
+					(eq (ninput u 'x) 0)) a))))
+    (if (< (length li) 2)
+	a
+	(let* ((var (min-elem li :test (lambda (u) (length (masks-occur-once u)))))
+	       (r (car (masks-occur-once var))))
+	  (replace-n-pair a var r r var)))))
+
+(defun iter-simplify-x (a)
+  (let ((s (simplify-x a)))
+    (if (equal s a)
+	a
+	(iter-simplify-x s))))
+
+; When RefreshMasks is not probed, the n outputs can be perfectly simulated from the 
+; knowledge of the xor of the inputs xi only.
+; Formal verification of Lemma 4 in [Cor17a]
+(defun check-refreshmasks-x (n)
+  (init-counter-rand)
+   (let* ((in (shares 'x n))
+	  (a (refreshmasks in)))
+     (format t "In: ~A~%" in)
+     (format t "Out: ~A~%" a)
+     (format t "~A~%" (t-flatten-xor (iter-simplify-x a))))))
+
+
 ; Routines for formal verification in polynomial time
 
 ; set all randoms to zero
