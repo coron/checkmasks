@@ -25,10 +25,13 @@
 ; [Cor17b] Jean-Sebastien Coron, Formal Verification of Side-Channel
 ;          Countermeasures via Elementary Circuit Transformations. 
 ; 
-; We also refer to some lemmas from the paper:
+; We also refer to some lemmas from the papers:
 ; 
 ; [Cor17a] Jean-Sebastien Coron. High-order conversion from boolean to arithmetic masking. 
 ;          Proceedings of CHES 2017.
+;
+; [CRZ18] Jean-Sébastien Coron, Franck Rondepierre, Rina Zeitoun. High Order Masking of Look-up Tables 
+;         with Common Shares. To appear at TCHES 2018. IACR Cryptology ePrint Archive 2017: 271 (2017)
 
 
 ; Some utilities
@@ -76,13 +79,16 @@
   (defun init-counter-rand ()
     (setf i 0)))
 
-(defun is-var (a x)
-  (and (symbolp a)
-       (eq (aref (symbol-name a) 0) (aref (symbol-name x) 0))))
+(defun is-var (a &optional (s 'x))
+  (and (atom a)       
+       (symbolp a)
+       (eq (aref (symbol-name a) 0)
+	   (aref (symbol-name s) 0))))
 
 (defun is-rand (a)
   (is-var a 'r))
 
+;(shares 'x 3) => (x1 x2 x3)
 (defun shares (s n)
   (mapcar (lambda (i)
 	    (intern (format nil "~A~A" s i)))
@@ -113,6 +119,7 @@
 	  (accumulate r (nth i ci))
 	  (accumulate r (nth j ci)))))))
 
+; (list-nil 3) => (nil nil nil)
 (defun list-nil (n)
   (let (out)
     (dotimes (i n out)
@@ -134,13 +141,13 @@
 
 ; Start of the formal transformation routines
 
-(defconstant list-ops '(+ * shift get))
+(defconstant list-ops '(+ * psi add sub))
 
 (defun is-op (a)
   (and (consp a) 
        (find (car a) list-ops)))
 
-(defun tapp (f n &key (h (make-hash-table)))
+(defun tapp (f n &key (h (make-hash-table :test 'equal)))
   (labels ((rec (n)
 	     (if (atom n)
 		 (funcall f n nil)
@@ -192,11 +199,12 @@
     out))
 
 ; (+ x r) -> r
+; r must occur only once in the sum
 (defun rep-n (a r)
   (tappm a
     (cond ((atom it) it)
 	  ((and (listp it) 
-		(eq (car it) '+)
+		(or (eq (car it) '+) (eq (car it) 'sub) (eq (car it) 'add))
 		(find r it)) r)
 	  ('t lst))))
 
@@ -236,7 +244,7 @@
 	 (out (refreshmasks in)))
     (format 't "Input: ~A~%" in)
     (format 't "Output: ~A~%" out)
-    (dotimes (i n)
+    (dotimes (i n 't)
       (format 't "Case ~A: ~A~%" i 
 	      (iter-simplify-string (list (remove (nth i out) out)))))))
 	
@@ -249,13 +257,54 @@
 			     (nuple (- n 1) (cdr lst)))
 		     (nuple n (cdr lst))))))
 
+(defmacro while (test &rest body)
+  `(do ()
+       ((not ,test))
+     ,@body))
+
+(defun gen-subsets (nt n f)
+  (let ((v (make-array nt)))
+    (dotimes (i nt)
+      (setf (aref v i) i))
+    (while (<= (aref v 0) (- n nt))
+      (funcall f v)
+      (incf (aref v (- nt 1)))
+      (let ((i (- nt 1)))
+	(while (and (>= i 1) (>= (aref v i) (- n (- (- nt 1) i))))
+	  (setf (aref v i) 0)
+	  (incf (aref v (- i 1)))
+	  (decf i))
+	(incf i)
+	(while (< i nt)
+	  (setf (aref v i) (+ (aref v (- i 1)) 1))
+	  (incf i))))))
+
+; A macro to run other all subsets of n elements among a list, without storing all the subsets.
+(defmacro do-nuples ((x n2 lst2 &optional (res nil)) &body body)
+  (with-gensyms (v lst i n)
+    `(let ((,lst ,lst2) (,n ,n2))
+       (gen-subsets ,n (length ,lst)
+	  (lambda (,v)
+	    (let (,x)
+	      (dotimes (,i ,n)
+		(push (nth (aref ,v ,i) ,lst) ,x))
+	      (setf ,x (reverse ,x))
+	      ,@body)))
+       ,res)))
+
+(defmacro dorange ((i a b) &body body)
+  (with-gensyms (j a2)
+    `(let ((,a2 ,a))
+       (dotimes (,j (- ,b ,a2))
+	 (let ((,i (+ ,a2 ,j)))
+	   ,@body)))))
+
+
 ; (linput '(a0 a1 b0) 'a) -> (0 1)
 (defun linput (a s)
   (remove-duplicates
     (filter (lambda (it)
-	      (if (and (atom it) 
-		       (symbolp it)
-		       (eq (aref (symbol-name it) 0) (aref (symbol-name s) 0)))
+	      (if (is-var it s)
 		  (parse-integer (subseq (symbol-name it) 1))))
 	    (h-list-variables a))))
 
@@ -263,9 +312,19 @@
 (defun ninput (a s)
   (length (linput a s)))
 
+(defun fact (n)
+  (if (eq n 1) 1 (* n (fact (- n 1)))))
+
+(defun binomial (n a)
+  (/ (fact n) (* (fact a) (fact (- n a)))))
+
 (defun check-ni (a nt var &key all)
-  (let ((flag 't))
-    (dolist (x (nuple nt (h-list-variables a)) flag)
+  (format 't "Number of variables: ~A~%" (length (h-list-variables a)))
+  (format 't "Number of nuples: ~A~%" (binomial (length (h-list-variables a)) nt))
+  (let ((flag 't) (i 0))
+    (do-nuples (x nt (h-list-variables a) flag)
+      (incf i)
+      (if (eq (mod i 100000) 0) (print i))      
       (let ((si (iter-simplify x)))
 	(when (> (ninput si var) nt)
 	  (format 't "~A~%" x) ;"~A => ~A~%" x si)
@@ -285,18 +344,24 @@
 	 (b `((+ ,(car a) ,(cadr a)) ,@(cdr a))))
     (not (check-ni b (- n 1) 'x))))
  
-(defun check-sni (a nt var &key all)
+(defun check-sni (a nt var &key all (sim #'iter-simplify))
   (format 't "Number of variables: ~A~%" (length (h-list-variables a)))
-  (let ((nu (nuple nt (h-list-variables a)))
-	(flag 't))
-    (format 't "Number of nuples: ~A~%" (length nu))
-    (dolist (y nu flag)
-      (let ((si (iter-simplify y)))
-	(when (> (ninput si var) (- nt (length (intersection a y))))
-	  (format 't "~A~%" y)
-	  (setf flag nil)
-	  (unless all
-	    (return-from check-sni nil)))))))
+  (let ((flag 't) (i 0))
+    (format 't "Number of nuples: ~A~%" (binomial (length (h-list-variables a)) nt))
+    (format 't "nt=~A~%" nt)
+    (do-nuples (y nt (h-list-variables a) flag)
+      (incf i)
+      (when (eq (mod i 100000) 0)
+	(format 't "~A~%" i))
+      (let ((ni (- nt (length (intersection a y)))))
+	(when (> (ninput y var) ni)
+	  (let ((si (funcall sim y)))
+	    (when (> (ninput si var) ni)
+	      (format 't "~A~%" i)
+	      (format 't "~A~%" y)
+	      (setf flag nil)
+	      (unless all
+		(return-from check-sni nil)))))))))
 
 (defun check-refreshmasks-non-sni (n &key all)
   (let* ((inp (shares 'x n))
@@ -415,6 +480,32 @@
 	    (format 't "~A~%" y)
 	    (return-from check-refreshmasks-xor nil)))))))
 
+
+; Formal verification of [CRZ18, Lemma 3]
+(defun check-refreshmasks-zero-imp (n &key reverse)
+  (init-counter-rand)
+  (let* ((inp (append (shares 'x (- n 1)) (list 0)))
+	 (a (refreshmasks inp :reverse reverse))
+	 (listvar (h-list-variables a))
+	 (nu (nuple (- n 1) listvar))
+	 (flag 't))
+    (print-info-in-out-var-nuples inp a listvar nu)
+    (dolist (y nu flag)
+      (let* ((O (mapcar (lambda (x) (+ 1 (position x a)))
+			(intersection y a)))
+	     (nt (- (- n 1) (length O)))
+	     (si (iter-simplify y))
+	     (I (linput si 'x)))
+	(when (and (> (length I) nt)
+		   (> (length (set-difference I O))
+		      (- nt 1)))
+	  (format 't "y=~A~%  O=~A~%  nt=~A~%  I=~A~%" y O nt I)
+	  (setf flag nil))))))
+
+(defun timing-check-refreshmasks-zero-imp (nmax)
+  (dolist (i (range 3 nmax))
+    (format 't "n=~A~%" i)
+    (time (check-refreshmasks-zero-imp i))))
 
 ; Routines for formal verification in polynomial time
 
@@ -654,6 +745,7 @@
 		(format 't "    New c. : ~A" (pretty-print-matrix a3 n :indent 13 :nof 't))
 		(let ((a4 (simplify-random-zero a3 :only lrand)))
 		  (format 't "    Rand 0 : ~A" (pretty-print-matrix a4 (- n 1) :indent 13 :nof 't)))))))))))
+
 
 ; Automatic generation of security proofs
 
