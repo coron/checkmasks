@@ -509,23 +509,20 @@
 
 ; (sort-var '(x3 x2 x1)) => (x1 x2 x3)
 (defun sort-var (x)
-  (sort x #'< :key (lambda (u) (parse-integer (symbol-name u) :start 1))))
+  (sort x #'string< :key #'symbol-name))
 
 ; (a a b b b c) => (b c)
 (defun remove-mod-2 (a)
-  (let (out (h (make-hash-table)))
+  (let ((h (make-hash-table :test #'equal)))
     (dolist (x a)
-      (if (atom x)
-	  (incf-nil (gethash x h))
-	  (push x out)))
-    (let (out2 outr)
+      (incf-nil (gethash x h)))
+    (let (out)
       (maphash (lambda (x v)
 		 (when (eq (mod v 2) 1)
-		   (if (is-rand x)
-		       (push x outr)
-		       (push x out2)))) h)
-      (append out (sort-var out2) (sort-var outr)))))
-      
+		   (push x out))) h)
+      (append (remove-if #'atom out)
+	      (sort-var (remove-if-not #'atom out))))))
+
 (defun single (x)
   (and (consp x) (null (cdr x))))
 
@@ -556,6 +553,14 @@
     (dolist (x (cdr a) v)
       (let ((m2 (funcall test x)))
 	(when (< m2 m)
+	  (setf v x m m2))))))
+
+(defun max-elem (a &key (test #'identity))
+  (let ((v (car a))
+	(m (funcall test (car a))))
+    (dolist (x (cdr a) v)
+      (let ((m2 (funcall test x)))
+	(when (> m2 m)
 	  (setf v x m m2))))))
 
 (defun is-xor (n)
@@ -602,7 +607,7 @@
 	  (a (refreshmasks in)))
      (format t "In: ~A~%" in)
      (format t "Out: ~A~%" a)
-     (format t "~A~%" (t-flatten-xor (iter-simplify-x a))))))
+     (format t "~A~%" (t-flatten-xor (iter-simplify-x a)))))
 
 
 ; Routines for formal verification in polynomial time
