@@ -18,7 +18,7 @@ This is an implementation in Common Lisp of the techniques described in the pape
 #### Automatic generation of security proof:
 * Automatic poly-time verification of t-SNI of multiplication-based refreshing, and of the two previous properties of RefreshMasks.
 
-#### Reference:
+#### References:
 [Cor17a] Jean-Sebastien Coron. High-order conversion from boolean to arithmetic masking. Proceedings of CHES 2017.
 
 [CRZ18] Jean-Sébastien Coron, Franck Rondepierre, Rina Zeitoun. High Order Masking of Look-up Tables 

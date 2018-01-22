@@ -370,7 +370,7 @@
     (format 't "Output: ~A~%" a)
     (not (check-sni a (- n 1) 'x :all all))))
 
-; FullRefresh is t-SNI. See [Cor17b, Lemma 3] 
+; FullRefresh is t-SNI. See [Cor17b, Lemma 4] 
 (defun check-fullrefresh-sni (n)
   (let* ((inp (shares 'x n))
 	 (a (fullrefresh inp)))
@@ -384,7 +384,7 @@
    (format 't "Number of variables: ~A~%" (length listvar))
    (format 't "Number of nuples: ~A~%" (length nu)))
 
-; SecMult is t-SNI. See [Cor17b, Lemma 6] 
+; SecMult is t-SNI. See [Cor17b, Lemma 10] 
 (defun check-secmult-sni (n)
   (let* ((nt (- n 1))
 	 (inpa (shares 'a n))
@@ -402,7 +402,7 @@
 
 ; When the last output variable yn of RefreshMasks is probed, then only t-1 input
 ; variables are required for the simulation, instead of t.
-; Formal verification of [Cor17b, Lemma 4], corresponding to [Cor17a, Lemma 6]
+; Formal verification of [Cor17b, Lemma 3], corresponding to [Cor17a, Lemma 6]
 (defun check-refreshmasks-last (n)
   (let* ((in (shares 'x n))
 	 (a (refreshmasks in))
@@ -425,7 +425,7 @@
 ; We consider RefreshMasks with n+1 inputs, with x_{n+1}=0.
 ; For t probes, only t-1 inputs are required for the simulation, instead of t,
 ; except in the trivial case of the adversary probing the input xi's only 
-; Formal verification of [Cor17b, Lemma 5], correpsonding to [Cor17a, Lemma 5]
+; Formal verification of [Cor17b, Lemma 6], correpsonding to [Cor17a, Lemma 5]
 (defun check-refreshmasks-zero (n)
   (init-counter-rand)
   (let* ((is (shares 'x n))
@@ -444,7 +444,7 @@
 ; When the last output variable yn of RefreshMasks is probed, and when there are a total
 ; of n probes, then only n-1 input variables are required for the simulation, unless
 ; the n probes are on the n outputs yi.
-; Formal verification of [Cor17b, Lemma 10], corresponding to [Cor17a, Lemma 7]
+; Formal verification of [Cor17b, Lemma 7], corresponding to [Cor17a, Lemma 7]
 (defun check-refreshmasks-last-n (n)
   (init-counter-rand)
   (let* ((in (shares 'x n))
@@ -464,7 +464,7 @@
 ; We consider the RefreshMasks circuit in which we xor the last two outputs y_{n-1}
 ; and y_n. For t probes, only t inputs are required. For t=n-1, we exclude the
 ; case of all n-1 output variables being probed. We can do the check for t=n-1 probes only.
-; Formal verification of [Cor17b, Lemma 12], corresponding to [Cor17a, Lemma 8]
+; Formal verification of [Cor17b, Lemma 9], corresponding to [Cor17a, Lemma 8]
 (defun check-refreshmasks-xor (n)
   (init-counter-rand)
   (let* ((in (shares 'x n))
@@ -528,6 +528,9 @@
 (defun single (x)
   (and (consp x) (null (cdr x))))
 
+(defun is-xor (n)
+  (and (consp n) (eq (car n) '+)))
+
 ; (+ (+ a b) (+ a c)) => (+ c b)
 (defun flatten-xor (n)
   (if (is-xor n) 
@@ -565,9 +568,6 @@
 	(when (> m2 m)
 	  (setf v x m m2))))))
 
-(defun is-xor (n)
-  (and (consp n) (eq (car n) '+)))
-
 (defun replace-n-pair (a old new old2 new2)
   (tappm a
     (cond ((equal it old) new)
@@ -602,7 +602,7 @@
 
 ; When RefreshMasks is not probed, the n outputs can be perfectly simulated from the 
 ; knowledge of the xor of the inputs xi only.
-; Formal verification of Lemma 4 in [Cor17a]
+; Formal verification of [Cor17a, Lemma 4]
 (defun check-refreshmasks-x (n)
   (init-counter-rand)
    (let* ((in (shares 'x n))
@@ -657,7 +657,7 @@
     (equal inp b)))
 
 ; Verification of t-SNI of FullRefresh in poly-time.
-; See Lemma 3 in Section 4.3 in [Cor17b] 
+; See [Cor17b, Appendix D] 
 (defun check-fullrefresh-tsni-poly (n)
   (init-counter-rand)
   (let* ((inp (shares 'x n))
@@ -677,7 +677,7 @@
 
 ; When the last output variable yn of RefreshMasks is probed, then only t-1 input
 ; variables are required for the simulation, instead of t.
-; Formal verification in polynomial time of [Cor17b, Section 4.4, Lemma 4], corresponding to 
+; Formal verification in polynomial time of [Cor17b, Appendix E.1, Lemma 3], corresponding to 
 ; [Cor17a, Lemma 6].
 (defun check-refreshmasks-last-poly (n)
   (init-counter-rand)
@@ -708,7 +708,7 @@
 ; We consider RefreshMasks with n+1 inputs, with x_{n+1}=0.
 ; For t probes, only t-1 inputs are required for the simulation, instead of t,
 ; except in the trivial case of the adversary probing the input xi's only 
-; Formal verification of [Cor17b, Appendix B, Lemma 5], corresponding to [Cor17a, Lemma 5]
+; Formal verification of [Cor17b, Appendix E.2, Lemma 6], corresponding to [Cor17a, Lemma 5]
 (defun check-refreshmasks-zero-poly (n)
   (init-counter-rand)
   (let* ((inp (append (shares 'x n) (list 0)))
@@ -791,7 +791,7 @@
 	  ('t lst))))
 
 ; Formal verification of the t-NI property of SecMult in polynomial-time
-; See Lemma 9 in Section 4.5 of [Cor17b]
+; See Lemma 13 in Appendix F.1 of [Cor17b]
 (defun check-secmult-ni-poly (n)
   (init-counter-rand)
   (let* ((inpx (shares 'x n))
@@ -813,7 +813,7 @@
 	  (format 't "  Random zero: ~A" (pretty-print-matrix na3 (- n 1) :indent 15 :nof 't)))))))
 
 ; Formal verification of the t-SNI property of SecMult in polynomial-time
-; See Lemma 6 and Appendix C in [Cor17b]
+; See Lemma 10 and Appendix F.2 in [Cor17b]
 (defun check-secmult-sni-poly (n)
   (init-counter-rand)
   (let* ((inpx (shares 'x n))
