@@ -8,6 +8,7 @@ This is an implementation in Common Lisp of the techniques described in the pape
 * Generic verification of the t-SNI of multiplication-based refreshing
 * Generic verification of the t-SNI of multiplication
 * Generic verification of some properties of RefreshMasks: lemmas 5, 6, 7, 8 of [Cor17a], and Lemma 3 from [CRZ18].
+* Generic verification of the t-SNI property of the Boolean to arithmetic conversion algorithm from [Cor17a].
 
 #### Polynomial-time verification fo security properties:
 * Poly-time verification of the t-SNI of multiplication-based refreshing [Cor17b, Lemma 3]
