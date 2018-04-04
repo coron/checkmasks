@@ -31,8 +31,10 @@
 ;          Proceedings of CHES 2017.
 ;
 ; [CRZ18] Jean-Sébastien Coron, Franck Rondepierre, Rina Zeitoun. High Order Masking of Look-up Tables 
-;         with Common Shares. To appear at TCHES 2018. IACR Cryptology ePrint Archive 2017: 271 (2017)
-
+;         with Common Shares. IACR TCHES 2018(1):40-72 (2018). IACR Cryptology ePrint Archive 2017: 271 (2017)
+;
+; [BCZ18] Luk Bettale, Jean-Sebastien Coron and Rina Zeitoun. Improved High-Order Conversion From Boolean
+;         to Arithmetic Masking. To appear at TCHES 2018.
 
 ; Some utilities
 (defun range (n &optional e)
@@ -508,6 +510,27 @@
   (dolist (i (range 3 nmax))
     (format 't "n=~A~%" i)
     (time (check-refreshmasks-zero-imp i))))
+
+; Formal verification of [BCZ18, Lemma 6]
+(defun check-refreshmasks-oneprobe (n &key rev)
+  (init-counter-rand)
+  (let* ((in (shares 'x n))
+	 (a (refreshmasks in :reverse (not rev)))
+	 (y1 (car a))
+	 (listvar (remove y1 (h-list-variables a))))
+    (format t "In: ~A~%" in)
+    (format t "Out: ~A~%" a)
+    (format t "Number of intermediate variables: ~A~%" (length listvar))
+    (dolist (z listvar 't)
+      (let* ((z2 (list z y1))
+	     (si (iter-simplify z2)))
+	(unless (and (or (is-rand (car si))
+			 (find (car si) in))
+		     (and (is-rand (cadr si))
+			  (not (eq (cadr si) (car si)))))
+	  (format 't "Failure: ~A~%" z2)
+	  (return-from check-refreshmasks-oneprobe nil))))))
+
 
 ; (sort-var '(x3 x2 x1)) => (x1 x2 x3)
 (defun sort-var (x)
