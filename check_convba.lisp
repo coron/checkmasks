@@ -19,6 +19,14 @@
 ; MA  02110-1301, USA.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+; This is formal verification of the Boolean to arithmetic countermeasures:
+; 
+; [Cor17a] Jean-Sebastien Coron. High-order conversion from boolean to arithmetic masking. 
+;          Proceedings of CHES 2017.
+;
+; [BCZ18] Luk Bettale, Jean-Sebastien Coron and Rina Zeitoun. Improved High-Order Conversion From Boolean
+;         to Arithmetic Masking. To appear at TCHES 2018.
+
 
 (setf *print-circle* nil)
 
@@ -49,6 +57,7 @@
 		    `(psi ,(car a) ,u))
 		  (cddr a)))))
 
+; This is the Boolean to arithmetic conversion algorithm from [Cor17a]
 (defun convba (x)
   (if (eq (length x) 2)
       (goubin-sni x)
@@ -56,6 +65,15 @@
 	(additive-grouping (convba (f-compression (refreshmasks (cdr a))))
 			   (convba (f-compression (refreshmasks (psi-gadget a))))))))
 
+; This is the Boolean to arithmetic conversion algorithm from [BCZ18]
+(defun impconvba (a)
+  (let ((n (- (length a) 1)))
+    (if (eq n 1)
+	`((+ ,(car a) ,(cadr a)))
+	(let ((b (refreshmasks a :reverse 't)))
+	  (additive-grouping (impconvba (cdr b))
+			     (impconvba (psi-gadget b)))))))
+   	  
 (defun is-psi (x)
   (and (consp x) (eq (car x) 'psi)))
 
@@ -158,8 +176,15 @@
 	  ((and (eq (car it) 'add) (eq (cadr it) 0)) (caddr it))
 	  ('t lst))))
 
+; (psi x 0) => x
+(defun simplify-psi (a)
+  (tappm a
+    (cond ((atom it) it)
+	  ((and (eq (car it) 'psi) (eq (caddr it) 0)) (cadr it))
+	  ('t lst))))
+
 (defun iter-sf-psi (a)
-  (let ((b (iter-simplify (iter-flatten-xor-replace-psi (simplify-add (simplify-sub (random-probe-zero (prop-add a))))))))
+  (let ((b (iter-simplify (iter-flatten-xor-replace-psi (simplify-psi (simplify-add (simplify-sub (random-probe-zero (prop-add a)))))))))
     (if (not (equal b a))
 	(iter-sf-psi b)
 	b)))
@@ -175,7 +200,6 @@
     (let ((z (iter-simplify (iter-flatten-xor-replace-psi x))))
       (when (no-sub z)
 	(return-from try-replace-psi-sub z)))))
-
 
 (defun mappend (fn &rest lsts)
   (apply #'append (apply #'mapcar fn lsts)))
@@ -238,3 +262,15 @@
 (defun timing-check-convba-sni (nmax)
   (dolist (i (range 2 nmax))
     (time (check-convba-sni i))))
+
+(defun check-impconvba-sni (n)
+  (init-counter-rand)
+  (let* ((inp (shares 'x (+ n 1)))
+	 (a (impconvba inp)))
+    (format 't "Input: ~A~%" inp)
+    (format 't "Output: ~A~%" a)
+    (check-sni a (- n 1) 'x :sim #'iter-simplify-convba)))
+
+(defun timing-check-impconvba-sni (nmax)
+  (dolist (i (range 2 nmax))
+    (time (check-impconvba-sni i))))
