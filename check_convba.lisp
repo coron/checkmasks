@@ -176,12 +176,18 @@
 	  ((and (eq (car it) 'add) (eq (cadr it) 0)) (caddr it))
 	  ('t lst))))
 
+; We apply this rule for the Boolean to arithmetic conversion algorithm from [BCZ18], 
+; but not for the  Boolean to arithmetic conversion algorithm from [Cor17a]
+(setf *simplify-psi* 't)
+
 ; (psi x 0) => x
 (defun simplify-psi (a)
-  (tappm a
-    (cond ((atom it) it)
-	  ((and (eq (car it) 'psi) (eq (caddr it) 0)) (cadr it))
-	  ('t lst))))
+  (if *simplify-psi*
+      (tappm a
+	(cond ((atom it) it)
+	      ((and (eq (car it) 'psi) (eq (caddr it) 0)) (cadr it))
+	      ('t lst)))
+      a))
 
 (defun iter-sf-psi (a)
   (let ((b (iter-simplify (iter-flatten-xor-replace-psi (simplify-psi (simplify-add (simplify-sub (random-probe-zero (prop-add a)))))))))
@@ -252,6 +258,7 @@
     (check-sni a 1 'x :sim #'iter-simplify-convba)))
 
 (defun check-convba-sni (n)
+  (setf *simplify-psi* nil)
   (init-counter-rand)
   (let* ((inp (shares 'x n))
 	 (a (convba inp)))
@@ -264,6 +271,7 @@
     (time (check-convba-sni i))))
 
 (defun check-impconvba-sni (n)
+  (setf *simplify-psi* 't)
   (init-counter-rand)
   (let* ((inp (shares 'x (+ n 1)))
 	 (a (impconvba inp)))
