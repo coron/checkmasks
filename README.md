@@ -2,7 +2,7 @@
 
 This is an implementation in Common Lisp of the techniques described in the paper:
 
-[Cor17b] Jean-Sebastien Coron. Formal Verification of Side-Channel Countermeasures via Elementary Circuit Transformations. IACR eprint archive. https://eprint.iacr.org/2017/879.pdf
+[Cor17b] Jean-Sébastien Coron. Formal Verification of Side-Channel Countermeasures via Elementary Circuit Transformations. ACNS 2018: 65-82. https://eprint.iacr.org/2017/879.pdf
 
 #### Generic verification of security properties:
 * Generic verification of the t-SNI of multiplication-based refreshing
