@@ -259,11 +259,6 @@
 			     (nuple (- n 1) (cdr lst)))
 		     (nuple n (cdr lst))))))
 
-(defmacro while (test &rest body)
-  `(do ()
-       ((not ,test))
-     ,@body))
-
 (defun gen-subsets (nt n f)
   (let ((v (make-array nt)))
     (dotimes (i nt)
