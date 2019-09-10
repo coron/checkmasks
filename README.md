@@ -8,7 +8,7 @@ This is an implementation in Common Lisp of the techniques described in the pape
 * Generic verification of the t-SNI of multiplication-based refreshing
 * Generic verification of the t-SNI of multiplication
 * Generic verification of some properties of RefreshMasks: lemmas 5, 6, 7, 8 of [Cor17a], and Lemma 3 from [CRZ18].
-* Generic verification of the t-SNI property of the Boolean to arithmetic conversion algorithm from [Cor17a].
+* Generic verification of the t-SNI property of the Boolean to arithmetic conversion algorithm from [Cor17a] and [BCZ18].
 
 #### Polynomial-time verification fo security properties:
 * Poly-time verification of the t-SNI of multiplication-based refreshing [Cor17b, Lemma 3]
@@ -23,3 +23,6 @@ This is an implementation in Common Lisp of the techniques described in the pape
 
 [CRZ18] Jean-Sébastien Coron, Franck Rondepierre, Rina Zeitoun. High Order Masking of Look-up Tables 
         with Common Shares. To appear at TCHES 2018. IACR Cryptology ePrint Archive 2017: 271 (2017)
+
+[BCZ18] Luk Bettale, Jean-Sebastien Coron and Rina Zeitoun. Improved High-Order Conversion From Boolean
+        to Arithmetic Masking. IACR TCHES 2018(2): 22-45 (2018). IACR Cryptology ePrint Archive 2018: 328 (2018)

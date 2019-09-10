@@ -34,7 +34,7 @@
 ;         with Common Shares. IACR TCHES 2018(1):40-72 (2018). IACR Cryptology ePrint Archive 2017: 271 (2017)
 ;
 ; [BCZ18] Luk Bettale, Jean-Sebastien Coron and Rina Zeitoun. Improved High-Order Conversion From Boolean
-;         to Arithmetic Masking. To appear at TCHES 2018.
+;         to Arithmetic Masking. IACR TCHES 2018(2): 22-45 (2018). IACR Cryptology ePrint Archive 2018: 328 (2018)
 
 ; Some utilities
 (defun range (n &optional e)
@@ -73,7 +73,7 @@
 	(if val (push val acc))))
     (nreverse acc)))
 
-; random variables have the form R0, R1, etc.
+; random variables have the form R1, R2, etc.
 (let ((i 0))
   (defun new-rand ()
     (intern (format nil "R~A" (incf i))))
@@ -128,7 +128,7 @@
       (push nil out))))
 
 ; The secure multiplication algorithm from [ISW03] and [RP10]
-(defun secmult (a b)
+(defun secmult (a b &key (get-rand #'new-rand))
   (let* ((n (length a))
 	 (ci (list-nil n)))
     (labels ((mul (i j)
@@ -136,7 +136,7 @@
       (dotimes (i n ci)
 	(accumulate (mul i i) (nth i ci))
 	(dolist (j (range (+ i 1) n))
-	  (let ((r (new-rand)))
+	  (let ((r (funcall get-rand)))
 	    (accumulate r (nth i ci))
 	    (accumulate `(+ (+ ,(mul i j) ,r) ,(mul j i))
 			(nth j ci))))))))
@@ -164,6 +164,49 @@
 	   (declare (ignorable lst))
 	   ,@body)
 	   ,n))
+
+; (sort-var '(x3 x2 x1)) => (x1 x2 x3)
+(defun sort-var (x)
+  (sort x #'string< :key #'symbol-name))
+
+; (a a b b b c) => (b c)
+(defun remove-mod-2 (a)
+  (let ((h (make-hash-table :test #'equal)))
+    (dolist (x a)
+      (incf-nil (gethash x h)))
+    (let (out)
+      (maphash (lambda (x v)
+		 (when (eq (mod v 2) 1)
+		   (push x out))) h)
+      (append (remove-if #'atom out)
+	      (sort-var (remove-if-not #'atom out))))))
+
+(defun single (x)
+  (and (consp x) (null (cdr x))))
+
+(defun is-xor (n)
+  (and (consp n) (eq (car n) '+)))
+
+; (+ (+ a b) (+ a c)) => (+ c b)
+(defun flatten-xor (n)
+  (if (is-xor n) 
+      (let (out)
+	(dolist (x (cdr n))
+	  (if (is-xor x)
+	    (dolist (y (cdr x))
+	      (push y out))
+	    (unless (eq x 0)
+	      (push x out))))
+	(let ((out2 (remove-mod-2 out)))
+	  (cond ((null out2) 0)
+		((single out2) (car out2))
+		('t `(+ ,@out2)))))
+      n))
+
+(defun t-flatten-xor (n)
+  (tappm n (if (atom it) 
+	       it 
+	       (flatten-xor lst))))
 
 (defun h-list-nodes (a)
   (let (out)
@@ -527,48 +570,7 @@
 	  (return-from check-refreshmasks-oneprobe nil))))))
 
 
-; (sort-var '(x3 x2 x1)) => (x1 x2 x3)
-(defun sort-var (x)
-  (sort x #'string< :key #'symbol-name))
 
-; (a a b b b c) => (b c)
-(defun remove-mod-2 (a)
-  (let ((h (make-hash-table :test #'equal)))
-    (dolist (x a)
-      (incf-nil (gethash x h)))
-    (let (out)
-      (maphash (lambda (x v)
-		 (when (eq (mod v 2) 1)
-		   (push x out))) h)
-      (append (remove-if #'atom out)
-	      (sort-var (remove-if-not #'atom out))))))
-
-(defun single (x)
-  (and (consp x) (null (cdr x))))
-
-(defun is-xor (n)
-  (and (consp n) (eq (car n) '+)))
-
-; (+ (+ a b) (+ a c)) => (+ c b)
-(defun flatten-xor (n)
-  (if (is-xor n) 
-      (let (out)
-	(dolist (x (cdr n))
-	  (if (is-xor x)
-	    (dolist (y (cdr x))
-	      (push y out))
-	    (unless (eq x 0)
-	      (push x out))))
-	(let ((out2 (remove-mod-2 out)))
-	  (cond ((null out2) 0)
-		((single out2) (car out2))
-		('t `(+ ,@out2)))))
-      n))
-
-(defun t-flatten-xor (n)
-  (tappm n (if (atom it) 
-	       it 
-	       (flatten-xor lst))))
 
 (defun min-elem (a &key (test #'identity))
   (let ((v (car a))
