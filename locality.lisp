@@ -89,3 +89,31 @@
     (format 't "n=~A secmult-FLR=~A secmult-ILR=~A semcmult-ILR2=~A~%" 
 	    i (locality-secmult-FLR i) (locality-secmult-ILR i) (locality-secmult-ILR2 i))))
 
+(defun tab-locality (n)
+  (let ((lst (range 3 n)))
+    (dolist (f (list `("Number of shares $n$" ,#'identity)
+		     `("$\\SecMultFLR$" ,#'locality-secmult-FLR)
+		     `("$\\SecMultILR$" ,#'locality-secmult-ILR)
+		     `("$\\SecMultILR2$" ,#'locality-secmult-ILR2)))
+      (format 't "~~~a~~ & ~{~~~a~~~^ & ~} \\\\ \\hline~%" (car f) (mapcar (cadr f) lst)))))
+
+; SecMult-FLR is t-SNI.
+(defun check-secmult-FLR-sni (n)
+  (init-counter-rand)
+  (check-sni (secmult-FLR (shares 'a n) (shares 'b n)) '(a b)))
+
+; SecMult-ILR is t-SNI.
+(defun check-secmult-ILR-sni (n)
+  (init-counter-rand)
+  (check-sni (secmult-ILR (shares 'a n) (shares 'b n)) '(a b)))
+
+; SecMult-ILR2 is t-SNI
+(defun check-secmult-ILR2-sni (n)
+  (init-counter-rand)
+  (check-sni (secmult-ILR2 (shares 'a n) (shares 'b n)) '(a b)))
+
+(defun timing-check-secmult-SNI (n)
+  (dolist (f (list #'check-secmult-ILR-sni #'check-secmult-ILR2-sni))
+    (dolist (i (range 3 n))
+      (format 't "Function: ~A n=~A~%" f i)      
+      (time (funcall f i)))))

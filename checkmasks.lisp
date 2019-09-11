@@ -349,8 +349,13 @@
 	    (h-list-variables a))))
 
 ; (ninput '(a0 a1 b0) 'a) -> 2
+; (ninput '(a0 a1 b0) '(a b)) -> 2
 (defun ninput (a s)
-  (length (linput a s)))
+  (if (atom s)
+      (length (linput a s))
+      (apply #'max 
+	     (mapcar (lambda (si) 
+		       (ninput a si)) s))))
 
 (defun fact (n)
   (if (eq n 1) 1 (* n (fact (- n 1)))))
@@ -384,11 +389,11 @@
 	 (b `((+ ,(car a) ,(cadr a)) ,@(cdr a))))
     (not (check-ni b (- n 1) 'x))))
  
-(defun check-sni (a nt var &key all (sim #'iter-simplify))
+(defun check-sni (a var &key all (sim #'iter-simplify))
+  (format 't "Output: ~A~%" a)
   (format 't "Number of variables: ~A~%" (length (h-list-variables a)))
-  (let ((flag 't) (i 0))
+  (let ((flag 't) (i 0) (nt (- (length a) 1)))
     (format 't "Number of nuples: ~A~%" (binomial (length (h-list-variables a)) nt))
-    (format 't "nt=~A~%" nt)
     (do-nuples (y nt (h-list-variables a) flag)
       (incf i)
       (when (eq (mod i 100000) 0)
@@ -404,19 +409,21 @@
 		(return-from check-sni nil)))))))))
 
 (defun check-refreshmasks-non-sni (n &key all)
+  (init-counter-rand)
   (let* ((inp (shares 'x n))
 	 (a (refreshmasks inp)))
     (format 't "Input: ~A~%" inp)
     (format 't "Output: ~A~%" a)
-    (not (check-sni a (- n 1) 'x :all all))))
+    (not (check-sni a 'x :all all))))
 
 ; FullRefresh is t-SNI. See [Cor17b, Lemma 4] 
 (defun check-fullrefresh-sni (n)
+  (init-counter-rand)
   (let* ((inp (shares 'x n))
 	 (a (fullrefresh inp)))
     (format 't "Input: ~A~%" inp)
     (format 't "Output: ~A~%" a)
-    (check-sni a (- n 1) 'x)))
+    (check-sni a 'x)))
 
 (defun print-info-in-out-var-nuples (in out listvar nu)
    (format 't "Input: ~A~%" in)
@@ -426,19 +433,8 @@
 
 ; SecMult is t-SNI. See [Cor17b, Lemma 10] 
 (defun check-secmult-sni (n)
-  (let* ((nt (- n 1))
-	 (inpa (shares 'a n))
-	 (inpb (shares 'b n))
-	 (c (secmult inpa inpb))
-	 (listvar (h-list-variables c))
-	 (nu (nuple nt listvar)))
-    (print-info-in-out-var-nuples (list inpa inpb) c listvar nu)
-    (dolist (y nu 't)
-      (let ((si (iter-simplify y))
-	    (vt (- nt (length (intersection c y)))))
-	(when (or (> (ninput si 'a) vt) (> (ninput si 'b) vt))
-	  (format 't "~A~%" y)
-	  (return-from check-secmult-sni nil))))))
+  (init-counter-rand)
+  (check-sni (secmult (shares 'a n) (shares 'b n)) '(a b)))
 
 ; When the last output variable yn of RefreshMasks is probed, then only t-1 input
 ; variables are required for the simulation, instead of t.

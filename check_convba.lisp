@@ -255,7 +255,7 @@
 	 (a (goubin-sni inp)))
     (format 't "Input: ~A~%" inp)
     (format 't "Output: ~A~%" a)
-    (check-sni a 1 'x :sim #'iter-simplify-convba)))
+    (check-sni a 'x :sim #'iter-simplify-convba)))
 
 (defun check-convba-sni (n)
   (setf *simplify-psi* nil)
@@ -264,7 +264,7 @@
 	 (a (convba inp)))
     (format 't "Input: ~A~%" inp)
     (format 't "Output: ~A~%" a)
-    (check-sni a (- n 1) 'x :sim #'iter-simplify-convba)))
+    (check-sni a 'x :sim #'iter-simplify-convba)))
 
 (defun timing-check-convba-sni (nmax)
   (dolist (i (range 2 nmax))
@@ -277,7 +277,7 @@
 	 (a (impconvba inp)))
     (format 't "Input: ~A~%" inp)
     (format 't "Output: ~A~%" a)
-    (check-sni a (- n 1) 'x :sim #'iter-simplify-convba)))
+    (check-sni a 'x :sim #'iter-simplify-convba)))
 
 (defun timing-check-impconvba-sni (nmax)
   (dolist (i (range 2 nmax))
