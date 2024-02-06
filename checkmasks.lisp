@@ -81,11 +81,15 @@
   (defun init-counter-rand ()
     (setf i 0)))
 
+; (is-var 'x1 'x) => T
+; (is-var 'x1 '(x y)) => T
 (defun is-var (a &optional (s 'x))
-  (and (atom a)       
-       (symbolp a)
-       (eq (aref (symbol-name a) 0)
-	   (aref (symbol-name s) 0))))
+  (if (atom s)
+      (and (atom a)       
+	   (symbolp a)
+	   (eq (aref (symbol-name a) 0)
+	       (aref (symbol-name s) 0)))
+      (some (lambda (u) (is-var a u)) s)))
 
 (defun is-rand (a)
   (is-var a 'r))
@@ -121,6 +125,29 @@
 	  (accumulate r (nth i ci))
 	  (accumulate r (nth j ci)))))))
 
+; This is actually the same circuit as fullrefresh
+(defun alt-fullrefresh (a)
+  (if (eq (length a) 1)
+      a
+      (refreshmasks
+        (append (alt-refresh (butlast a))
+		(last a)))))
+
+(defun convba (a &optional rec)
+  (if (eq (length a) 1)
+      (refreshmasks (append a (list 0)))
+      (refreshmasks
+        (append (mapcar (lambda (u) `(+ ,(car (last a)) ,u))
+			(convba (butlast a) 't))
+		(if rec (list 0))))))
+
+(defun convba-ni (a)
+  (if (eq (length a) 1)
+      a
+      (mapcar (lambda (u) `(+ ,(car (last a)) ,u))
+	      (refreshmasks (append (convba-ni (butlast a))
+				    (list 0))))))
+
 ; (list-nil 3) => (nil nil nil)
 (defun list-nil (n)
   (let (out)
@@ -143,7 +170,7 @@
 
 ; Start of the formal transformation routines
 
-(defconstant list-ops '(+ * psi add sub))
+(defconstant list-ops '(+ * - psi add sub))
 
 (defun is-op (a)
   (and (consp a) 
@@ -217,10 +244,11 @@
   (remove-if-not #'is-rand (h-list-nodes a)))
 
 ; Computes the list of intermediate variables
-(defun h-list-variables (a)
+(defun h-list-variables (a &key (exclude-out nil))
   (remove-if (lambda (x)
 	       (or (numberp x)
-		   (find x list-ops)))
+		   (find x list-ops)
+		   (and exclude-out (find x a))))
 	     (h-list-nodes a)))
 
 ; Computes the number of occurrence of each intermediate variable (atoms only)
@@ -303,23 +331,24 @@
 		     (nuple n (cdr lst))))))
 
 (defun gen-subsets (nt n f)
-  (let ((v (make-array nt)))
-    (dotimes (i nt)
-      (setf (aref v i) i))
-    (while (<= (aref v 0) (- n nt))
-      (funcall f v)
-      (incf (aref v (- nt 1)))
-      (let ((i (- nt 1)))
-	(while (and (>= i 1) (>= (aref v i) (- n (- (- nt 1) i))))
-	  (setf (aref v i) 0)
-	  (incf (aref v (- i 1)))
-	  (decf i))
-	(incf i)
-	(while (< i nt)
-	  (setf (aref v i) (+ (aref v (- i 1)) 1))
-	  (incf i))))))
+  (when (> nt 0)
+    (let ((v (make-array nt)))
+      (dotimes (i nt)
+        (setf (aref v i) i))
+      (while (<= (aref v 0) (- n nt))
+        (funcall f v)
+        (incf (aref v (- nt 1)))
+        (let ((i (- nt 1)))
+	  (while (and (>= i 1) (>= (aref v i) (- n (- (- nt 1) i))))
+	    (setf (aref v i) 0)
+	    (incf (aref v (- i 1)))
+	    (decf i))
+	  (incf i)
+	  (while (< i nt)
+	    (setf (aref v i) (+ (aref v (- i 1)) 1))
+	    (incf i)))))))
 
-; A macro to run other all subsets of n elements among a list, without storing all the subsets.
+; A macro to run over all subsets of n elements among a list, without storing all the subsets.
 (defmacro do-nuples ((x n2 lst2 &optional (res nil)) &body body)
   (with-gensyms (v lst i n)
     `(let ((,lst ,lst2) (,n ,n2))
@@ -339,8 +368,8 @@
 	 (let ((,i (+ ,a2 ,j)))
 	   ,@body)))))
 
-
-; (linput '(a0 a1 b0) 'a) -> (0 1)
+; (linput '(a0 a1 b2) 'a) -> (0 1)
+; (linput '(a0 a1 b2) '(a b)) -> (0 1 2)
 (defun linput (a s)
   (remove-duplicates
     (filter (lambda (it)
@@ -348,10 +377,11 @@
 		  (parse-integer (subseq (symbol-name it) 1))))
 	    (h-list-variables a))))
 
-; (ninput '(a0 a1 b0) 'a) -> 2
-; (ninput '(a0 a1 b0) '(a b)) -> 2
-(defun ninput (a s)
-  (if (atom s)
+; (ninput '(a1 a2 b3 b4 b5) 'a) -> 2
+; (ninput '(a1 a2 b3 b4 b5) '(a b)) -> 3
+; (ninput '(a1 a2 b3 b4 b5) '(a b) :merge 't) -> 5
+(defun ninput (a s &key merge)
+  (if (or merge (atom s))
       (length (linput a s))
       (apply #'max 
 	     (mapcar (lambda (si) 
@@ -407,6 +437,33 @@
 	      (setf flag nil)
 	      (unless all
 		(return-from check-sni nil)))))))))
+
+(defun xor-lst (a var)
+  (mapcar (lambda (x y) `(+ ,x ,y))
+	  a (shares var (length a))))
+
+; It is the same as sni, except that we xor the shares xi at the end
+(defun check-free-sni (a var &key all (sim #'iter-simplify))
+  (format 't "Output: ~A~%" a)
+  (format 't "Number of variables: ~A~%" (length (h-list-variables a)))
+  (let ((b (xor-lst a 'y))
+	(flag 't) (i 0) (nt (- (length a) 1)))
+    (format 't "Number of nuples: ~A~%" (binomial (length (h-list-variables a)) nt))
+    (format 't "new output: ~A~%" b)
+    (do-nuples (y nt (h-list-variables b) flag)
+      (incf i)
+      (when (eq (mod i 100000) 0)
+	(format 't "~A~%" i))
+      (let ((ni (- nt (length (intersection b y)))))
+	(when (> (ninput y (list var 'y) :merge 't) ni)
+	  (let ((si (funcall sim y)))
+	    ;(format 't "~A => ~A~%" y si)
+	    (when (> (ninput si (list var 'y) :merge 't) ni)
+	      (format 't "~A~%" i)
+	      (format 't "~A~%" y)
+	      (setf flag nil)
+	      (unless all
+		(return-from check-free-sni nil)))))))))
 
 (defun check-refreshmasks-non-sni (n &key all)
   (init-counter-rand)
